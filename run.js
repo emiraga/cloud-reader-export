@@ -21,6 +21,7 @@ class EBookCreator {
         this.asin = asin;
         this.fragments = {};
         this.skeletons = {};
+        this.images = {};
         this.jsonpFileRe = new RegExp('^\\w+\\((.*)\\);\\s*$');
         const goto = 'KindleContentInterface.gotoPosition';
         this.gotoRe = new RegExp('href="#" onclick="' + goto + '\\([0-9]+,([0-9]+)\\); return false;"', 'g');
@@ -42,33 +43,8 @@ class EBookCreator {
         const obj = JSON.parse(mFile[1]);
 
         if (obj.fragmentData && obj.fragmentMetadata) {
-            const id = obj['fragmentMetadata']['id'];
-            let data = obj['fragmentData'];
-            if (obj.fragmentMetadata.encryption) {
-                data = this.decrypt(data);
-            }
-            if (obj.fragmentMetadata.compression) {
-                data = this.decompress(data);
-            }
-
-            let processed = data;
-            if (obj.imageData) {
-                processed = processed.replace(
-                    this.dataUrlRe,
-                    function(_, iname) {
-                        if (!obj.imageData[iname]) {
-                            throw new Error("Missing image " + iname + " for fragment ID=" + id);
-                        }
-                        return 'src="' + obj.imageData[iname] + '"';
-                    }
-                );
-            }
-
-            processed = processed.replace(this.gotoRe, function(_, id) {
-                return 'href="#' + id + '"';
-            });
-
-            this.fragments[id] = { original: data, processed: processed };
+            const id = obj.fragmentMetadata.id;
+            this.foundFragment(id, obj.fragmentData, obj.fragmentMetadata, obj.imageData)
         }
 
         if (obj.skeletonData && obj.skeletonMetadata) {
@@ -81,6 +57,53 @@ class EBookCreator {
                 data = this.decompress(data);
             }
             this.skeletons[id] = { original: data };
+        }
+    }
+
+    foundFragment(id, data, fragmentMetadata, imageData) {
+        if (fragmentMetadata.encryption) {
+            data = this.decrypt(data);
+        }
+        if (fragmentMetadata.compression) {
+            data = this.decompress(data);
+        }
+        if (imageData) {
+            for (const iname in imageData) {
+                if (!imageData[iname]) {
+                    continue;
+                }
+                if (this.images[iname]) {
+                    if (this.images[iname] !== imageData[iname]) {
+                        console.warn('Duplicate missmatching image: ', iname);
+                    }
+                } else {
+                    this.images[iname] = imageData[iname];
+                }
+            }
+        }
+        this.fragments[id] = { original: data };
+    }
+
+    processFragments() {
+        let images = this.images;
+        for (let id in this.fragments) {
+            const data = this.fragments[id].original;
+            let processed = data;
+
+            processed = processed.replace(
+                this.dataUrlRe,
+                function(_, iname) {
+                    if (!images[iname]) {
+                        throw new Error("Missing image " + iname + " for fragment ID=" + id);
+                    }
+                    return 'src="' + images[iname] + '"';
+                }
+            );
+
+            processed = processed.replace(this.gotoRe, function(_, id) {
+                return 'href="#' + id + '"';
+            });
+            this.fragments[id].processed = processed;
         }
     }
 
@@ -107,7 +130,7 @@ class EBookCreator {
         const num_frags = this.fragmap.fragmentMetadata.numberOfFragments;
         fs.writeFileSync(htmlFile, HtmlHeader);
         for (let i = 0 ; i < num_frags - 1; i++) {
-            assert(this.fragments[i], 'Missin fragment ' + i);
+            assert(this.fragments[i], 'Missing fragment ' + i);
             fs.appendFileSync(htmlFile, this.fragments[i].processed + '\n\n');
         }
         // Last fragment is optional, some books will not have it
@@ -234,6 +257,27 @@ async function load_bookinfo_from_sqlite_database(dbfile) {
     return await db.get("select metadata, fragmap from 'bookinfo' where asin = '" + book.asin + "'");
 }
 
+async function load_fragments_from_sqlite_database(dbfile) {
+    const db = await sqlite.open({
+      filename: PATH + '/' + dbfile,
+      driver: sqlite3.cached.Database
+    });
+
+    try {
+        let exists = await db.get('SELECT name FROM sqlite_master WHERE type="table" AND name="fragments"');
+        if (!exists) {
+            return false;
+        }
+    } catch (e) {
+        return false;
+    }
+
+    const rows = await db.all("select id, piece, metadata, other from 'fragments' where asin = '" + book.asin + "' order by id");
+    for (const row of rows) {
+        book.foundFragment(row.id, row.piece, JSON.parse(row.metadata), JSON.parse(row.other).imageData);
+    }
+}
+
 (async function() {
     let bookinfo = false;
 
@@ -255,6 +299,12 @@ async function load_bookinfo_from_sqlite_database(dbfile) {
             book.jsonp(fname, har.files[fname]);
         }
     }
+
+    for (const dbfile of items) {
+        await load_fragments_from_sqlite_database(dbfile);
+    }
+
+    book.processFragments();
     const outputName = book.metadata.title.replace(/\:|\s+|\|/g, '-');
     book.dumpHtml(outputName + '.html');
 })();
