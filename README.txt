@@ -8,7 +8,7 @@ Therefore, it does not violate any copyright laws.
 
 The way to use this project is with Google Chrome (or similar) browser.
 
-- Open "Network" tab on Developer tools.
+- Open "Network" tab in Developer tools. Be sure that recording is active.
 
 - Navigate to read.amazon.com such that it opens the book right away.
 

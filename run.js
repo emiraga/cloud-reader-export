@@ -100,9 +100,13 @@ class EBookCreator {
 
         const num_frags = this.fragmap.fragmentMetadata.numberOfFragments;
         fs.writeFileSync(htmlFile, HtmlHeader);
-        for (let i = 0 ; i < num_frags; i++) {
-            assert(this.fragments[i]);
+        for (let i = 0 ; i < num_frags - 1; i++) {
+            assert(this.fragments[i], 'Missin fragment ' + i);
             fs.appendFileSync(htmlFile, this.fragments[i].processed + '\n\n');
+        }
+        // Last fragment is optional, some books will not have it
+        if (this.fragments[num_frags - 1]) {
+            fs.appendFileSync(htmlFile, this.fragments[num_frags - 1].processed + '\n\n');
         }
         fs.appendFileSync(htmlFile, '</body></html>');
     }

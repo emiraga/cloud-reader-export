@@ -5,3 +5,4 @@ old_*
 temp/
 *.har
 *.html
+compile_all.sh
