@@ -20,7 +20,6 @@ class EBookCreator {
     constructor(asin) {
         this.asin = asin;
         this.fragments = {};
-        this.skeletons = {};
         this.images = {};
         this.jsonpFileRe = new RegExp('^\\w+\\((.*)\\);\\s*$');
         const goto = 'KindleContentInterface.gotoPosition';
@@ -45,18 +44,6 @@ class EBookCreator {
         if (obj.fragmentData && obj.fragmentMetadata) {
             const id = obj.fragmentMetadata.id;
             this.foundFragment(id, obj.fragmentData, obj.fragmentMetadata, obj.imageData)
-        }
-
-        if (obj.skeletonData && obj.skeletonMetadata) {
-            const id = obj['skeletonMetadata']['id'];
-            let data = obj['skeletonData'];
-            if (obj.skeletonMetadata.encryption) {
-                data = this.decrypt(data);
-            }
-            if (obj.skeletonMetadata.compression) {
-                data = this.decompress(data);
-            }
-            this.skeletons[id] = { original: data };
         }
     }
 
@@ -179,18 +166,9 @@ function open_chrome_browser_har_file(fname) {
 function getCompressionDictionary(metadata) {
     assert(KindleCompression);
     var map = {};
-
-    if (metadata.cpr) {
-        KindleCompression.lzAddStringsToDictionary(metadata.cpr, map),
-        KindleCompression.lzAddNumbersToDictionary(map);
-        return KindleCompression.lzGetDecompressionDictionary(map);
-    }
-
-    if (metadata.cprJson) {
-        KindleCompression.lzAddStringsToDictionary(metadata.cprJson, map, 256),
-        KindleCompression.lzAddNumbersToDictionary(map, 256);
-        return KindleCompression.lzGetDecompressionDictionary(map);
-    }
+    KindleCompression.lzAddStringsToDictionary(metadata.cpr, map),
+    KindleCompression.lzAddNumbersToDictionary(map);
+    return KindleCompression.lzGetDecompressionDictionary(map);
 }
 
 
