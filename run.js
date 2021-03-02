@@ -5,9 +5,11 @@
 const homedir = require('os').homedir();
 const assert = require('assert').strict;
 const fs = require('fs');
-const print = console.log;
+const util = require('util');
+const readdir = util.promisify(fs.readdir);
 var sqlite3 = require('sqlite3').verbose();
 var sqlite = require('sqlite');
+const print = console.log;
 
 
 // This is for Mac OS X, on your OS you might need a different path, patches welcome
@@ -19,9 +21,10 @@ class EBookCreator {
         this.asin = asin;
         this.fragments = {};
         this.skeletons = {};
-        this.fileRe = new RegExp('^\\w+\\((.*)\\);\\s*$');
+        this.jsonpFileRe = new RegExp('^\\w+\\((.*)\\);\\s*$');
         const goto = 'KindleContentInterface.gotoPosition';
         this.gotoRe = new RegExp('href="#" onclick="' + goto + '\\([0-9]+,([0-9]+)\\); return false;"', 'g');
+        this.dataUrlRe = new RegExp('dataUrl="([^"]+)"', 'g');
     }
 
     decrypt(data) {
@@ -35,7 +38,7 @@ class EBookCreator {
     }
 
     jsonp(fname, cont) {
-        const mFile = cont.match(this.fileRe);
+        const mFile = cont.match(this.jsonpFileRe);
         const obj = JSON.parse(mFile[1]);
 
         if (obj.fragmentData && obj.fragmentMetadata) {
@@ -50,12 +53,15 @@ class EBookCreator {
 
             let processed = data;
             if (obj.imageData) {
-                for (const iname in obj.imageData) {
-                    processed = processed.replace(
-                        'dataUrl="' + iname + '"',
-                        'src="' + obj.imageData[iname] + '"'
-                    );
-                }
+                processed = processed.replace(
+                    this.dataUrlRe,
+                    function(_, iname) {
+                        if (!obj.imageData[iname]) {
+                            throw new Error("Missing image " + iname + " for fragment ID=" + id);
+                        }
+                        return 'src="' + obj.imageData[iname] + '"';
+                    }
+                );
             }
 
             processed = processed.replace(this.gotoRe, function(_, id) {
@@ -210,18 +216,36 @@ for (let fname in har.files) {
 }
 
 
-async function try_sqlite_database(dbfile) {
+async function load_bookinfo_from_sqlite_database(dbfile) {
     const db = await sqlite.open({
       filename: PATH + '/' + dbfile,
       driver: sqlite3.cached.Database
-    })
+    });
 
-    let exists = await db.get('SELECT name FROM sqlite_master WHERE type="table" AND name="bookinfo"');
-    if (!exists) {
-        return;
+    try {
+        let exists = await db.get('SELECT name FROM sqlite_master WHERE type="table" AND name="bookinfo"');
+        if (!exists) {
+            return false;
+        }
+    } catch (e) {
+        return false;
     }
 
-    let bookinfo = await db.get("select metadata, fragmap from 'bookinfo' where asin = '" + book.asin + "'");
+    return await db.get("select metadata, fragmap from 'bookinfo' where asin = '" + book.asin + "'");
+}
+
+(async function() {
+    let bookinfo = false;
+
+    // Chrome may have multiple sqlite files, we will try each one of them
+    const items = await readdir(PATH);
+    for (const dbfile of items) {
+        bookinfo = bookinfo || await load_bookinfo_from_sqlite_database(dbfile);
+    }
+    if (!bookinfo) {
+        throw new Error("Could not find chrome sqlite database or bookinfo table");
+    }
+
     book.metadata = JSON.parse(bookinfo.metadata);
     book.fragmap = JSON.parse(bookinfo.fragmap);
     book.ca_dictionary = getCompressionDictionary(book.metadata);
@@ -232,12 +256,5 @@ async function try_sqlite_database(dbfile) {
         }
     }
     const outputName = book.metadata.title.replace(/\:|\s+|\|/g, '-');
-    book.dumpHtml(outputName + '.html')
-}
-
-// Chrome may have multiple sqlite files, we will try each one of them
-fs.readdir(PATH, function(err, items) {
-    for (const dbfile of items) {
-        try_sqlite_database(dbfile);
-    }
-});
+    book.dumpHtml(outputName + '.html');
+})();
