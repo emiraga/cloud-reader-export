@@ -1,9 +1,9 @@
 Kindle Cloud Reader recently removed support for offline reading
 of books, this project aims to poorly and painfully restore that
-functionality by exporting HTML of a book that you legaly own.
+functionality by exporting HTML of a book that you legally own.
 
-This repo does not contain any kindle/amazon private keys or
-any compression or any encryption routines.
+This repository does not contain any kindle/amazon private keys
+or any compression or any encryption routines.
 Therefore, it does not violate any copyright laws.
 
 The way to use this project is with Google Chrome (or similar) browser.
