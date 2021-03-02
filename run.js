@@ -9,11 +9,15 @@ const util = require('util');
 const readdir = util.promisify(fs.readdir);
 var sqlite3 = require('sqlite3').verbose();
 var sqlite = require('sqlite');
+var safeEval = require('safe-eval');
 const print = console.log;
 
 
 // This is for Mac OS X, on your OS you might need a different path, patches welcome
 const PATH = homedir + '/Library/Application Support/Google/Chrome/Default/databases/https_read.amazon.com_0'
+
+let KindleCompression = undefined;
+let KindleO_Aaa = undefined;
 
 
 class EBookCreator {
@@ -189,7 +193,7 @@ for (let fname in har.files) {
         const b2 = cont.indexOf('ContentMigration=');
         if (b1 !== -1 && b2 !== -1 && b1 < b2) {
             const code = cont.slice(b1, b2).replace(new RegExp('[,\\s]+$'), '');
-            eval('global.' + code);
+            KindleCompression = safeEval(code);
         }
 
         // Relevant code for decoding should be between these two sections
@@ -197,7 +201,7 @@ for (let fname in har.files) {
         const c2 = cont.indexOf('KindleAppDb=');
         if (c1 !== -1 && c2 !== -1 && c1 < c2) {
             const code = cont.slice(c1, c2).replace(new RegExp('[,\\s]+$'), '');
-            eval('global.' + code);
+            KindleO_Aaa = safeEval(code);
         }
     }
 }
