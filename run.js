@@ -97,6 +97,51 @@ class EBookCreator {
             this.fragments[id].processed = processed;
         }
     }
+    dumpEpub(epubFile) {
+
+        for (let iname in this.images) {
+            let base64Image = this.images[iname].split(';base64,').pop();
+            fs.writeFileSync(iname, base64Image, {encoding: 'base64'});
+        }
+
+        const epub = require('epub-gen');
+
+        const options = {
+          title: this.metadata.title,
+          author: this.metadata.authorList,
+          cover: process.cwd() + '/' + this.metadata.cover,
+          output: epubFile,
+          tocTitle: '',
+          appendChapterTitles: false,
+          content: [
+            {
+              title: '-',
+              data: '',
+              beforeToc: true,
+            }
+          ],
+        };
+        const num_frags = this.numberOfFragments();
+        for (let i = 0 ; i < num_frags; i++) {
+            assert(this.fragments[i], 'Missing fragment ' + i);
+            options.content[0].data += this.fragments[i].original.replace(
+                new RegExp('dataUrl="', 'g'), 'src="' + 'file://' + process.cwd() + '/'
+            ).replace(this.gotoRe, function(_, id) {
+                return 'href="#' + id + '"';
+            });
+        }
+        print(options.cover);
+
+        new epub(options).promise.then(() => console.log('Done with epub'));
+    }
+
+    numberOfFragments() {
+        let num_frags = this.fragmap.fragmentMetadata.numberOfFragments;
+        if (!this.fragments[num_frags - 1]) {
+            num_frags--;
+        }
+        return num_frags;
+    }
 
     dumpHtml(htmlFile) {
         const css = [
@@ -118,15 +163,11 @@ class EBookCreator {
             '<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">' +
             '</head><body id="' + this.asin + '">\n\n';
 
-        const num_frags = this.fragmap.fragmentMetadata.numberOfFragments;
+        const num_frags = this.numberOfFragments();
         fs.writeFileSync(htmlFile, HtmlHeader);
-        for (let i = 0 ; i < num_frags - 1; i++) {
+        for (let i = 0 ; i < num_frags; i++) {
             assert(this.fragments[i], 'Missing fragment ' + i);
             fs.appendFileSync(htmlFile, this.fragments[i].processed + '\n\n');
-        }
-        // Last fragment is optional, some books will not have it
-        if (this.fragments[num_frags - 1]) {
-            fs.appendFileSync(htmlFile, this.fragments[num_frags - 1].processed + '\n\n');
         }
         fs.appendFileSync(htmlFile, '</body></html>');
     }
@@ -209,7 +250,7 @@ assert(KindleO_Aaa, "failed to load encryption routine from .HAR file")
 assert(KindleCompression, "failed to load compression routine from .HAR file");
 
 
-const book = new EBookCreator(har.asin, har.title);
+const book = new EBookCreator(har.asin);
 
 // Extract decryption key from HAR files
 for (let fname in har.files) {
@@ -289,4 +330,5 @@ async function load_fragments_from_sqlite_database(dbfile) {
     book.processFragments();
     const outputName = book.metadata.title.replace(/\:|\s+|\|/g, '-');
     book.dumpHtml(outputName + '.html');
+    // book.dumpEpub(outputName + '.epub');
 })();

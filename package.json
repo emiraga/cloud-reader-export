@@ -3,5 +3,8 @@
     "safe-eval": "^0.4.1",
     "sqlite": "^4.0.19",
     "sqlite3": "^5.0.2"
+  },
+  "optionalDependencies": {
+    "epub-gen": "^0.1.0"
   }
 }

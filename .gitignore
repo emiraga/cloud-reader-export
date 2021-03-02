@@ -4,4 +4,7 @@ old_*
 temp/
 *.har
 *.html
+*.epub
+.DS_Store
 compile_all.sh
+images/

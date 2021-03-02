@@ -16,6 +16,10 @@ The way to use this project is with Google Chrome (or similar) browser.
 
 - Starting from page 1. go page by page until the end of the book.
 
+  (You can scroll fast with your keyboard, using the Right Arrow,
+  as long as network request finishes. If some book is downloaded
+  offline in your local storage, then you can skip this step.)
+
 - Right click in "Network" tab on any recorded network request
 
 - Click "Save all as HAR with content"
