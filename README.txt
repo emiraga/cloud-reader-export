@@ -25,3 +25,12 @@ The way to use this project is with Google Chrome (or similar) browser.
 - Click "Save all as HAR with content"
 
 - Give that HAR file to this script.
+
+
+What about ebook export?
+
+Use Kindle Previewer to convert it to MOBI
+https://www.amazon.com/gp/feature.html?ie=UTF8&docId=1000765261
+
+This project also has experimental code for EPUB export,
+but it's still under development.
