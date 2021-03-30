@@ -97,43 +97,6 @@ class EBookCreator {
             this.fragments[id].processed = processed;
         }
     }
-    dumpEpub(epubFile) {
-
-        for (let iname in this.images) {
-            let base64Image = this.images[iname].split(';base64,').pop();
-            fs.writeFileSync(iname, base64Image, {encoding: 'base64'});
-        }
-
-        const epub = require('epub-gen');
-
-        const options = {
-          title: this.metadata.title,
-          author: this.metadata.authorList,
-          cover: process.cwd() + '/' + this.metadata.cover,
-          output: epubFile,
-          tocTitle: '',
-          appendChapterTitles: false,
-          content: [
-            {
-              title: '-',
-              data: '',
-              beforeToc: true,
-            }
-          ],
-        };
-        const num_frags = this.numberOfFragments();
-        for (let i = 0 ; i < num_frags; i++) {
-            assert(this.fragments[i], 'Missing fragment ' + i);
-            options.content[0].data += this.fragments[i].original.replace(
-                new RegExp('dataUrl="', 'g'), 'src="' + 'file://' + process.cwd() + '/'
-            ).replace(this.gotoRe, function(_, id) {
-                return 'href="#' + id + '"';
-            });
-        }
-        print(options.cover);
-
-        new epub(options).promise.then(() => console.log('Done with epub'));
-    }
 
     numberOfFragments() {
         let num_frags = this.fragmap.fragmentMetadata.numberOfFragments;
@@ -167,9 +130,64 @@ class EBookCreator {
         fs.writeFileSync(htmlFile, HtmlHeader);
         for (let i = 0 ; i < num_frags; i++) {
             assert(this.fragments[i], 'Missing fragment ' + i);
-            fs.appendFileSync(htmlFile, this.fragments[i].processed + '\n\n');
+            const fragment = this.fragments[i].processed;
+            fs.appendFileSync(htmlFile, fragment + '\n\n');
         }
         fs.appendFileSync(htmlFile, '</body></html>');
+    }
+
+    dumpEpub(epubFile) {
+        for (let iname in this.images) {
+            let base64Image = this.images[iname].split(';base64,').pop();
+            fs.writeFileSync(iname, base64Image, {encoding: 'base64'});
+        }
+        const beforeToc = false;
+        let chapters = [{title: 'Begin Here', data: '', beforeToc: beforeToc}];
+        let chapternum = 0;
+
+        const num_frags = this.numberOfFragments();
+        let filepos_to_chapter = {};
+        for (let i = 0 ; i < num_frags; i++) {
+            assert(this.fragments[i], 'Missing fragment ' + i);
+            let fragment = this.fragments[i].original.replace(
+                new RegExp('dataUrl="', 'g'), 'src="' + 'file://' + process.cwd() + '/'
+            );
+            const m = fragment.match(/span class="page-break"/);
+            if (m && m.index < 10) {
+                chapternum += 1;
+                chapters.push({title: 'Chapter ' + chapternum, data: '', beforeToc: beforeToc});
+            }
+            chapters[chapternum].data += fragment;
+
+            for (let x of fragment.matchAll(new RegExp('<a name="([0-9]+)" class="filepos_dest"', 'g'))) {
+                filepos_to_chapter[x[1]] = chapternum;
+            }
+        }
+
+        for (let i=0;i<chapters.length;i++) {
+            chapters[i].data = chapters[i].data.replace(this.gotoRe, function(_, id) {
+                let chapter = filepos_to_chapter[id];
+                if (!chapter) {
+                    console.warn('Unknown link with id=' + id);
+                    return 'href="#' + id + '"';
+                }
+                let new_id = chapter + '_chapter-' + chapter + '.xhtml';
+                return 'href="' + new_id + '"';
+            });
+
+        }
+
+        const options = {
+          title: this.metadata.title,
+          author: this.metadata.authorList,
+          cover: process.cwd() + '/' + this.metadata.cover,
+          output: epubFile,
+          tocTitle: 'Table of contents',
+          appendChapterTitles: false,
+          content: chapters,
+        };
+        const epub = require('epub-gen');
+        new epub(options).promise.then(() => console.log('Done with epub'));
     }
 }
 
